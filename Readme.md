@@ -1,4 +1,4 @@
-# tcCalculator
+# $\textsf{\color{#4c4c4c}tc}\textsf{\color{#ff4f4f}C}\textsf{\color{#4c4c4c}alculator}$
 
 Timecode calculator focused on copy-paste and advanced compatibility.
 
