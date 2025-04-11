@@ -4,11 +4,11 @@
 #AutoIt3Wrapper_Outfile=tcCalculator.exe
 #AutoIt3Wrapper_Res_Comment=Created with AutoIt
 #AutoIt3Wrapper_Res_Description=Timecode Calculator
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.0
+#AutoIt3Wrapper_Res_Fileversion=1.1.0.20
 #AutoIt3Wrapper_Res_ProductName=tcCalculator
-#AutoIt3Wrapper_Res_ProductVersion=1.0.0.0
+#AutoIt3Wrapper_Res_ProductVersion=1.1.0.0
 #AutoIt3Wrapper_Res_CompanyName=NyBumBum
-#AutoIt3Wrapper_Res_LegalCopyright=Copyright © 2024 NyBumBum
+#AutoIt3Wrapper_Res_LegalCopyright=Copyright © 2024-2025 NyBumBum
 #AutoIt3Wrapper_Res_File_Add=images\bmp\200.bmp,2,200
 #AutoIt3Wrapper_Res_File_Add=images\bmp\201.bmp,2,201
 #AutoIt3Wrapper_Res_File_Add=images\bmp\202.bmp,2,202
@@ -34,21 +34,26 @@
 #include <GuiButton.au3>
 #include <GUIConstantsEx.au3>
 #include <GuiEdit.au3>
-#include <GuiHotkey.au3> ;(UDF by Mat)
+#include <UDF\GuiHotkey.au3> ;(UDF by Mat)
 #include <GuiImageList.au3>
 #include <GuiMenu.au3>
 #include <EditConstants.au3>
 #include <Misc.au3>
 #include <StaticConstants.au3>
-#include "StringSize.au3" ;(UDF by Melba23)
+#include <UDF\StringSize.au3> ;(UDF by Melba23)
 #include <TabConstants.au3>
 #include <WinAPI.au3>
-#include <WinAPIGdi.au3>
+#include <WinAPIGdi.au3> ; modified For _WinAPI_DwmSetWindowAttribute(35, 36)
 #include <WinAPIHObj.au3>
 #include <WindowsConstants.au3>
 #include <GUIConstants.au3>
 
 _FixAccelHotKeyLayout()
+
+Opt('GUIEventOptions', 1)    ;for Saving Window Position on minimize
+
+Local $iGUIMainPosition_X, $iGUIMainPosition_Y, $iGUISettingsPosition_X, $iGUISettingsPosition_Y
+Local $iGUIMainWidht = 261, $iGUIMainHeight = 329, $iGUISettingsWidht = 380, $iGUISettingsHeight = 530
 
 Global $nFontSize
 
@@ -99,6 +104,7 @@ Global $sHotKey                         ; format aka Send
 Global $iHotKeyCode                     ; for Registry
 
 Local $iSuccess
+Global $bTildeEnabled = False
 
 Global $hInstance = _WinAPI_GetModuleHandle(0)
 If $hInstance = 0 Then
@@ -108,7 +114,7 @@ EndIf
 
 Global $sArchitecture = @OSArch         ;for Registry
 
-#Region;--------------------Localization---------------------------------------------------------(FAQ by Yashied)
+#Region;--------------------LOCALIZATION---------------------------------------------------------(FAQ BY YASHIED)
 Func GetStringFromResources($iStringID)                          ;function to extract strings from a String Table
 	Local $iString = _WinAPI_LoadString($hInstance, $iStringID)
 	If @error Then
@@ -138,7 +144,7 @@ Global $anArayStringsErrors[16] = [6016, 6017, 6018, 6019, 6020, 6021, 6022, 602
 Global Enum $eErrorTitle, $eUnknownError, $eTimecodeInvalid, $eTimecodeIncorrect, $eFramesInvalid, $eFramesOverMax, $eDrop, $eIntegerOverMax, $eResultOverMax, $eNegativeNumber, $eDivideByZero, $eCastomSeparatorEmpty, $eHotKeyRegistrationDenied, $eSavedHotKeyDeniedOnStart, $eHotKeyEmpty, $eAlreadyRunning
 #EndRegion;-------------------------------------------------------------------------------------
 
-;--------------------------------------------------------------------------------Checking if already running
+;--------------------------------------------------------------------------------CHECKING IF ALREADY RUNNING
 If WinExists('[CLASS:AutoIt v3;TITLE:' & @ScriptName & ']') Then
 	$iError = 14
 	PrintError($iError)
@@ -150,6 +156,19 @@ AutoItWinSetTitle(@ScriptName)
 
 GetRegistry()
 
+;-------------------------------------------------------------------------------CHECKING THE WINDOW AVAILABILITY
+_Check_Window_Position($iGUIMainPosition_X, $iGUIMainPosition_Y, $iGUIMainWidht, $iGUIMainHeight)
+If @error Then
+	$iGUIMainPosition_X = -1
+	$iGUIMainPosition_Y = -1
+EndIf
+_Check_Window_Position($iGUISettingsPosition_X, $iGUISettingsPosition_Y, $iGUISettingsWidht, $iGUISettingsHeight)
+If @error Then
+	$iGUISettingsPosition_X = -1
+	$iGUISettingsPosition_Y = -1
+EndIf
+
+;------------------------------------
 Global $anArrayFPS[8][4] = [[6000, 24, 0, 0], [6001, 25, 0, 0], [6002, 30, 1, 2], [6003, 30, 0, 0], [6004, 48, 0, 0], [6005, 50, 0, 0], [6006, 60, 1, 4], [6007, 60, 0, 0]]    ;reserved until 6016
 
 $iFPS = $anArrayFPS[$nFPSMode][1]
@@ -162,8 +181,8 @@ Global Const $asArrayNonDropSeparators[1][4] = [["00:00:00:00", ":", ":", ":"]]
 ChoosingSeparators()
 $nFontSize = CalculateFontSize()
 
-#Region ### START Koda GUI section ### FormMain
-$hFormMain = GUICreate("", 261, 329, -1, -1)
+#Region ;-----------------------------START KODA GUI SECTION: FORMMAIN----------------------------------------------------
+$hFormMain = GUICreate("", $iGUIMainWidht, $iGUIMainHeight, $iGUIMainPosition_X, $iGUIMainPosition_Y)
 WinSetTitle($hFormMain, "", GetStringFromResources($anArrayStringsMain[$eFormMainTitle]) & " " & GetStringFromResources($anArrayFPS[$nFPSMode][0]))
 GUISetFont(18, 400, 0, "Segoe UI")
 GUISetIcon(@ScriptFullPath, 99)
@@ -172,7 +191,7 @@ GUICtrlSetLimit(-1, 12)
 $sTempTC = "00" & $sSeparatorFirst & "00" & $sSeparatorSecond & "00" & $sSeparatorThird & "00"
 GUICtrlSetData($idInput, $sTempTC)
 
-#Region ;-------------Context Menu For Input---------------------------------
+;-------------------------------------------------------------------------Custom Context Menu for Input
 $hContextMenu_Input = _GUICtrlMenu_CreatePopup()
 If $hContextMenu_Input = 0 Then
 	MsgBox($MB_ICONERROR, "Error", "Failed to get menu handle.")
@@ -184,14 +203,14 @@ _GUICtrlMenu_AddMenuItem($hContextMenu_Input, GetStringFromResources($anArrayStr
 _GUICtrlMenu_AddMenuItem($hContextMenu_Input, GetStringFromResources($anArrayStringsContextMenu_Input[$ePaste]), $WM_PASTE)              ;Paste
 _GUICtrlMenu_AddMenuItem($hContextMenu_Input, GetStringFromResources($anArrayStringsContextMenu_Input[$eDelete]), $WM_CLEAR)             ;Delete
 _GUICtrlMenu_AddMenuItem($hContextMenu_Input, "")
-_GUICtrlMenu_AddMenuItem($hContextMenu_Input, GetStringFromResources($anArrayStringsContextMenu_Input[$eSelectAll]), $idSelectAll)       ;Sellect All
-#EndRegion ;-------------Context Menu For Input---------------------------------
+_GUICtrlMenu_AddMenuItem($hContextMenu_Input, GetStringFromResources($anArrayStringsContextMenu_Input[$eSelectAll]), $idSelectAll)       ;Select All
+;-----------------------------------------------------------------------------------------
 
 GUICtrlSetFont(-1, $nFontSize, 400, 0, "Segoe UI")
 $idButton_Menu = GUICtrlCreateButton("", 0, 68, 66, 53)
 GUICtrlSetTip(-1, GetStringFromResources($anArrayStringsMain[$eButtonMenuTip]))                                                           ;Menu
 
-#Region;------Menu For Button Menu-----------------------------------------------------------------
+;-------------------------------------------------------------------------Menu for Button Menu
 $idDummy_Menu = GUICtrlCreateDummy()
 $idContextMenu_ButtonMenu = GUICtrlCreateContextMenu($idDummy_Menu)
 $idContext_AlwaysOnTop = GUICtrlCreateMenuItem(GetStringFromResources($anArrayStringsContextMenu_ButtonMenu[$eAlwaysOnTop]), $idContextMenu_ButtonMenu)          ;"Always On Top"
@@ -199,7 +218,7 @@ $idContext_Settings = GUICtrlCreateMenuItem(GetStringFromResources($anArrayStrin
 $idContext_Help = GUICtrlCreateMenuItem(GetStringFromResources($anArrayStringsContextMenu_ButtonMenu[$eHelp]), $idContextMenu_ButtonMenu)                        ;"Help"
 GUICtrlCreateMenuItem("", $idContextMenu_ButtonMenu)
 $idContext_About = GUICtrlCreateMenuItem(GetStringFromResources($anArrayStringsContextMenu_ButtonMenu[$eAbout]), $idContextMenu_ButtonMenu)                      ;"About"
-#EndRegion;-----------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------
 
 $idButton_Clear = GUICtrlCreateButton("C", 65, 68, 66, 53)
 GUICtrlSetTip(-1, GetStringFromResources($anArrayStringsMain[$eButtonClearTip]))                                                         ;"Clear All"
@@ -258,7 +277,7 @@ Dim $aAcc[104][2] = [["{NUMPADDIV}", $idDummy_Divide], ["{NUMPADMULT}", $idDummy
 
 $nResultatus = GUISetAccelerators($aAcc)
 
-#Region	 ;---------------------Button skin--------------------------------------------
+;-----------------------------------------------------------------------------Button skin
 Global $ansArrayBtnImg[20][3] = [[$idButton_0, 200, 200], [$idButton_1, 200, 200], [$idButton_2, 200, 200], [$idButton_3, 200, 200], [$idButton_4, 200, 200], [$idButton_5, 200, 200], [$idButton_6, 200, 200], [$idButton_7, 200, 200], [$idButton_8, 200, 200], [$idButton_9, 200, 200], [$idButton_Clear, 201, 201], [$idButton_Frames, 201, 201], [$idButton_Menu, 202, 202], [$idButton_Paste, 203, 303], [$idButton_Copy, 204, 204], [$idButton_Divide, 205, 205], [$idButton_Multiply, 206, 206], [$idButton_Subtract, 207, 207], [$idButton_Addition, 208, 208], [$idButton_EqualTo, 209, 309]]
 
 Global $ii = 1    ;BMP 2xx
@@ -272,7 +291,7 @@ For $i = 0 To $i_max Step 1
 	SkinForButtons()
 Next
 
-;-------------------------------------------------------------------------------------------Windows 11 Skin (method by Andy27)
+;-----------------------------------------------------------------------------Windows 11 Skin (method by Andy27)
 If @OSVersion == "WIN_11" Then    ;Or WIN_12
 	GUISetBkColor(0x4C4C4C, $hFormMain)
 	GUICtrlSetBkColor($idInput, 0x4C4C4C)
@@ -288,22 +307,11 @@ If @OSVersion == "WIN_11" Then    ;Or WIN_12
 		Exit
 	EndIf
 EndIf
-#EndRegion	 ;---------------------Button skin--------------------------------------------
+;------------------------------------------------------------------------------
 
 If $bTrainingMode Then
 	GUICtrlSetState($idButton_EqualTo, $GUI_DISABLE)
 EndIf
-;-----------------------------------------------------------------------------Tilde
-$idLabel_Tilde = GUICtrlCreateLabel("~", 5, 6, 16, 49, $SS_CENTER)
-GUICtrlSetFont(-1, 24, 400, 0, "Segoe UI")
-If @OSVersion == "WIN_11" Then    ;Or WIN_12
-	GUICtrlSetColor(-1, 0xFFFFFF)
-	GUICtrlSetBkColor(-1, 0x4C4C4C)
-Else
-	GUICtrlSetColor(-1, 0x000000)
-	GUICtrlSetBkColor(-1, 0xFFFFFF)
-EndIf
-GUICtrlSetState(-1, $GUI_HIDE)
 ;-------------------------------------
 GUISetState(@SW_SHOW)
 
@@ -317,14 +325,14 @@ GUIRegisterMsg($WM_EXITMENULOOP, "WM_EXITMENULOOP")
 
 $wProcHandle = DllCallbackRegister("_WindowProc", "ptr", "hwnd;uint;wparam;lparam")
 $wProcOld = _WinAPI_SetWindowLong(GUICtrlGetHandle($idInput), $GWL_WNDPROC, DllCallbackGetPtr($wProcHandle))
-#EndRegion ;------------END Koda GUI section-------------------------------------------
+#EndRegion ;-----------------------------START KODA GUI SECTION: FORMMAIN----------------------------------------------------
 
 
-#Region;---------------START Koda GUI section--------------FormSettings----------------
-$hFormSettings = GUICreate(GetStringFromResources($anArrayStringsSettings[$eFormSettingsTitle]), 380, 550, -1, -1, BitOR($WS_CAPTION, $WS_SYSMENU), -1, $hFormMain)             ;"Settings"
+#Region;---------------START KODA GUI SECTION: FORMSETTINGS----------------
+$hFormSettings = GUICreate(GetStringFromResources($anArrayStringsSettings[$eFormSettingsTitle]), $iGUISettingsWidht, $iGUISettingsHeight, $iGUISettingsPosition_X, $iGUISettingsPosition_Y, BitOR($WS_CAPTION, $WS_SYSMENU), -1, $hFormMain)             ;"Settings"
 GUISetIcon(@ScriptFullPath, 99)
 GUISetFont(10, 400, 0, "Segoe UI")
-$hTab = GUICtrlCreateTab(10, 10, 361, 491)
+$hTab = GUICtrlCreateTab(10, 10, 361, 471)
 GUICtrlSetFont(-1, 10, 400, 0, "Segoe UI")
 ;---------------------------------------------------------------------General Tab
 $idTabSheet_General = GUICtrlCreateTabItem(GetStringFromResources($anArayStringsSettingsTabGeneral[$eTabGeneralTitle]))                                                         ;"General"
@@ -337,7 +345,7 @@ GUICtrlSetData(-1, Combo_FPSFullList(), GetStringFromResources($anArrayFPS[$nFPS
 GUICtrlCreateGroup("", -99, -99, 1, 1)
 $idGroup_Training = GUICtrlCreateGroup(GetStringFromResources($anArayStringsSettingsTabGeneral[$eGroupTraining]), 20, 150, 340, 130)                                            ;"Training Mode"
 GUICtrlSetFont(-1, 10, 400, 0, "Segoe UI")
-$idCheckbox_Training = GUICtrlCreateCheckbox(GetStringFromResources($anArayStringsSettingsTabGeneral[$eCheckBoxTraining]), 40, 180, 300, 31, BitOR($GUI_SS_DEFAULT_CHECKBOX, $BS_MULTILINE))       ;"Lock arithmetic operator buttons"
+$idCheckbox_Training = GUICtrlCreateCheckbox(GetStringFromResources($anArayStringsSettingsTabGeneral[$eCheckBoxTraining]), 40, 175, 300, 41, BitOR($GUI_SS_DEFAULT_CHECKBOX, $BS_MULTILINE))       ;"Lock arithmetic operator buttons"
 $idLabel_Training = GUICtrlCreateLabel(GetStringFromResources($anArayStringsSettingsTabGeneral[$eLabelTraining]), 40, 220, 300, 41)                                                                ;"Enabling or disabling this mode does not change the logic of the program."
 GUICtrlCreateGroup("", -99, -99, 1, 1)
 
@@ -408,13 +416,13 @@ Else
 	GUICtrlSetState($idLabel_DropFrame2, $GUI_DISABLE)
 EndIf
 ;-----------------------------
-$idGroup_HotKey = GUICtrlCreateGroup(GetStringFromResources($anArayStringsSettingsTabTricks[$eGroupHotKey]), 20, 280, 341, 201)                                ;"Hotkeys for Smart Paste"
+$idGroup_HotKey = GUICtrlCreateGroup(GetStringFromResources($anArayStringsSettingsTabTricks[$eGroupHotKey]), 20, 280, 341, 181)                                ;"Hotkeys for Smart Paste"
 GUICtrlSetFont(-1, 10, 400, 0, "Segoe UI")
 $idCheckbox_HotKey = GUICtrlCreateCheckbox(GetStringFromResources($anArayStringsSettingsTabTricks[$eCheckboxHotKey]), 40, 310, 90, 21)                         ;"Enable"
 $hInput_HotKey = _GUICtrlHotkey_Create($hFormSettings, 140, 309, 200, 23)
 _GUICtrlHotkey_SetHotkeyCode($hInput_HotKey, $iHotKeyCode)
 ControlHide($hFormSettings, "", $hInput_HotKey)
-$idLabel_HotKey = GUICtrlCreateLabel(GetStringFromResources($anArayStringsSettingsTabTricks[$eLabelHotKey]), 40, 350, 300, 111)                                ;"Select hotkeys to launch Smart Paste, which will clear timecode from the clipboard of separators and paste the remaining digits into the target program, simulating keyboard input."
+$idLabel_HotKey = GUICtrlCreateLabel(GetStringFromResources($anArayStringsSettingsTabTricks[$eLabelHotKey]), 40, 350, 300, 91)                                ;"Select hotkeys to launch Smart Paste, which will clear timecode from the clipboard of separators and paste the remaining digits into the target program, simulating keyboard input."
 GUICtrlCreateGroup("", -99, -99, 1, 1)
 
 If Not $bHotKeyMode Then
@@ -440,25 +448,21 @@ GUICtrlSetCursor(-1, 0)
 $idLabel_About_GitHub = GUICtrlCreateLabel("www.github.com/nbb1967/tccalculator", 34, 254, 310, 21, $SS_CENTER)
 GUICtrlSetFont(-1, 10, 400, 0, "Segoe UI")
 GUICtrlSetColor(-1, 0x0B6992)
-GUICtrlSetCursor(-1, 0)
 $idLabel_About_Contact = GUICtrlCreateLabel("nybumbum@gmail.com", 34, 275, 310, 21, $SS_CENTER)
 GUICtrlSetFont(-1, 10, 400, 0, "Segoe UI")
 GUICtrlSetColor(-1, 0x0B6992)
 GUICtrlSetCursor(-1, 0)
 $idLabel_About_Comment = GUICtrlCreateLabel(GetStringFromResources($anArayStringsSettingsTabAbout[$eLabelAboutComment]), 34, 296, 310, 21, $SS_CENTER)        ;"Created with Autoit"
 GUICtrlSetFont(-1, 10, 400, 0, "Segoe UI")
-$idGroup_About_Notice = GUICtrlCreateGroup("", 34, 338, 310, 141)
+$idLabel__About_Notice = GUICtrlCreateLabel(GetStringFromResources($anArayStringsSettingsTabAbout[$eLabelAboutDisclaimer]), 34, 338, 310, 91)                 ;"This software is free for personal, non-commercial use and is provided «AS IS» without warranty of any kind..."
 GUICtrlSetFont(-1, 10, 400, 0, "Segoe UI")
-$idLabel__About_Notice = GUICtrlCreateLabel(GetStringFromResources($anArayStringsSettingsTabAbout[$eLabelAboutDisclaimer]), 54, 368, 270, 91)                 ;"This software is provided «AS IS» without warranty of any kind. This software is free for personal, non-commercial use."
-GUICtrlSetFont(-1, 10, 400, 0, "Segoe UI")
-GUICtrlCreateGroup("", -99, -99, 1, 1)
 GUICtrlCreateTabItem("")
-$idButton_Save = GUICtrlCreateButton(GetStringFromResources($anArrayStringsSettings[$eButtonSave]), 270, 510, 100, 31)                                        ;"Save"
-#EndRegion ;---------------------------------------------------------------------------------------------------
+$idButton_Save = GUICtrlCreateButton(GetStringFromResources($anArrayStringsSettings[$eButtonSave]), 270, 490, 100, 31)                                        ;"Save"
+#EndRegion
 
 
 If $bHotKeyMode And $iHotKeyCode <> 0 Then
-	$sHotKey = _GUICtrlHotkey_GetHotkey($hInput_HotKey)
+	$sHotKey = StringLower(_GUICtrlHotkey_GetHotkey($hInput_HotKey))
 	_FixAccelHotKeyLayout()
 	$iError = RegistrationHotkey($sHotKey)
 	If $iError <> 0 Then
@@ -498,11 +502,11 @@ $apPTR_Bad_3[0] = _WinAPI_SetWindowLong($hInput_Bad_3, $GWL_WNDPROC, $apPTR_Bad_
 
 ;-----------------------------------------------------------------------------------------------------------
 
-Local $bOnlyDigit                 ;for Button Paste (f-mode to tc-mode automatic switching)
+Local $bOnlyDigit                ;for Button Paste (f-mode to tc-mode automatic switching)
 ;-----------------------------------------------------------------------------------------------------------
 $iLastTab = 5                    ;To hiding UDF-created $hInput_HotKey from tabs
 
-;--------------------------------------------------------------------------------------------------------------------Selection
+;----------------------------------------------------------------------------------------Selection
 Local $hInput = ControlGetHandle("", "", $idInput)
 Local $hCtrlInKeyboardFocus
 
@@ -516,41 +520,71 @@ While 1
 	$aMsg = GUIGetMsg(1)
 	Select        ;-----------------------------------------------------------Close Main
 		Case $aMsg[0] = $GUI_EVENT_CLOSE And $aMsg[1] = $hFormMain
+			$aiGUIMainPosition = WinGetPos($hFormMain)
+			If $aiGUIMainPosition[0] <> -32000 And $aiGUIMainPosition[1] <> -32000 Then
+				Switch $sArchitecture
+					Case "X64"
+						RegWrite("HKCU64\Software\NyBumBum\tcCalculator", "GUIMainPosition_X", "REG_SZ", $aiGUIMainPosition[0])
+						RegWrite("HKCU64\Software\NyBumBum\tcCalculator", "GUIMainPosition_Y", "REG_SZ", $aiGUIMainPosition[1])
+					Case "X86"
+						RegWrite("HKCU\Software\NyBumBum\tcCalculator", "GUIMainPosition_X", "REG_SZ", $aiGUIMainPosition[0])
+						RegWrite("HKCU\Software\NyBumBum\tcCalculator", "GUIMainPosition_Y", "REG_SZ", $aiGUIMainPosition[1])
+				EndSwitch
+			EndIf
+			;--------------------------------------
 			ExitLoop
+			;-----------------------------------------------------------------Minimize Main
+		Case $aMsg[0] = $GUI_EVENT_MINIMIZE And $aMsg[1] = $hFormMain
+			$aiGUIMainPosition = WinGetPos($hFormMain)
+			Switch $sArchitecture
+				Case "X64"
+					RegWrite("HKCU64\Software\NyBumBum\tcCalculator", "GUIMainPosition_X", "REG_SZ", $aiGUIMainPosition[0])
+					RegWrite("HKCU64\Software\NyBumBum\tcCalculator", "GUIMainPosition_Y", "REG_SZ", $aiGUIMainPosition[1])
+				Case "X86"
+					RegWrite("HKCU\Software\NyBumBum\tcCalculator", "GUIMainPosition_X", "REG_SZ", $aiGUIMainPosition[0])
+					RegWrite("HKCU\Software\NyBumBum\tcCalculator", "GUIMainPosition_Y", "REG_SZ", $aiGUIMainPosition[1])
+			EndSwitch
+			;--------------------
+			GUISetState(@SW_MINIMIZE, $hFormMain)
 			;-----------------------------------------------------------------Restore Main
 		Case $aMsg[0] = $GUI_EVENT_RESTORE And $aMsg[1] = $hFormMain
+			GUISetState(@SW_RESTORE, $hFormMain)
 			GUICtrlSendMsg($idInput, $EM_SETSEL, -1, -1)
-			;---------------------------------------------------------------Digital Button
-		Case $aMsg[0] = $idButton_0
-			GUICtrlSetData($idInput, 0, Default)    ;optional:default - paste in position of cursor
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_1
-			GUICtrlSetData($idInput, 1, Default)
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_2
-			GUICtrlSetData($idInput, 2, Default)
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_3
-			GUICtrlSetData($idInput, 3, Default)
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_4
-			GUICtrlSetData($idInput, 4, Default)
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_5
-			GUICtrlSetData($idInput, 5, Default)
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_6
-			GUICtrlSetData($idInput, 6, Default)
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_7
-			GUICtrlSetData($idInput, 7, Default)
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_8
-			GUICtrlSetData($idInput, 8, Default)
-			ControlFocus($hFormMain, "", $idInput)
-		Case $aMsg[0] = $idButton_9
-			GUICtrlSetData($idInput, 9, Default)
-			ControlFocus($hFormMain, "", $idInput)
+			;-----------------------------------------------------------------"Tilde" Disable
+		Case $aMsg[0] = $idButton_0 Or $aMsg[0] = $idButton_1 Or $aMsg[0] = $idButton_2 Or $aMsg[0] = $idButton_3 Or $aMsg[0] = $idButton_4 Or $aMsg[0] = $idButton_5 Or $aMsg[0] = $idButton_6 Or $aMsg[0] = $idButton_7 Or $aMsg[0] = $idButton_8 Or $aMsg[0] = $idButton_9
+			_TildeDisable()
+			Select
+				Case $aMsg[0] = $idButton_0
+					GUICtrlSetData($idInput, 0, Default)    ;optional:default - paste in position of cursor
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_1
+					GUICtrlSetData($idInput, 1, Default)
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_2
+					GUICtrlSetData($idInput, 2, Default)
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_3
+					GUICtrlSetData($idInput, 3, Default)
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_4
+					GUICtrlSetData($idInput, 4, Default)
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_5
+					GUICtrlSetData($idInput, 5, Default)
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_6
+					GUICtrlSetData($idInput, 6, Default)
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_7
+					GUICtrlSetData($idInput, 7, Default)
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_8
+					GUICtrlSetData($idInput, 8, Default)
+					ControlFocus($hFormMain, "", $idInput)
+				Case $aMsg[0] = $idButton_9
+					GUICtrlSetData($idInput, 9, Default)
+					ControlFocus($hFormMain, "", $idInput)
+			EndSelect
 			;---------------------------------------------------------------------------------Copy
 		Case $aMsg[0] = $idButton_Copy
 			$sInputData = GUICtrlRead($idInput)
@@ -558,6 +592,8 @@ While 1
 			ControlFocus($hFormMain, "", $idInput)
 			;---------------------------------------------------------------------------------Paste
 		Case $aMsg[0] = $idButton_Paste
+			_TildeDisable()
+			;-----------------------------
 			If $nInputMode = 2 Then
 				$bOnlyDigit = StringIsDigit(ClipGet())
 				If Not $bOnlyDigit Then
@@ -569,8 +605,10 @@ While 1
 			EndIf
 			GUICtrlSetData($idInput, ClipGet())
 			ControlFocus($hFormMain, "", $idInput)
-			;----------------------------------------------------------------------------------Clear
+			;---------------------------------------------------------------------------------Clear
 		Case $aMsg[0] = $idButton_Clear
+			_TildeDisable()
+			;------------------------
 			$sResultTC = ""
 			$iArgumentFirstFrame = 0
 			$iArgumentSecondFrame = 0
@@ -700,9 +738,10 @@ While 1
 				Case Else
 					ShellExecute(@ScriptDir & "\help\en\tcCalculator_en.pdf")
 			EndSwitch
-			;-----------------------------------------------------------Addition, Subtract, Multiply, Divide
+			;-------------------------------------------------------------------------------------Addition, Subtract, Multiply, Divide
 		Case $aMsg[0] = $idButton_Addition Or $aMsg[0] = $idButton_Subtract Or $aMsg[0] = $idButton_Multiply Or $aMsg[0] = $idButton_Divide
-			GUICtrlSetState($idLabel_Tilde, $GUI_HIDE)
+			_TildeDisable()
+			;----------------------------------
 			If $nArithmeticOperation <> 0 Then
 				ContinueLoop
 			EndIf
@@ -803,7 +842,8 @@ While 1
 				Case 1
 					$iResultFrame = Int($iArgumentFirstFrame / $iArgumentSecondFrame)
 					If Mod($iArgumentFirstFrame, $iArgumentSecondFrame) <> 0 Then
-						GUICtrlSetState($idLabel_Tilde, $GUI_SHOW) ;----------------->>>   Tilde
+						GUICtrlSetColor($idInput, 0xFF4F4F)
+						$bTildeEnabled = True                    ; "Tilde" Enable (Red text)
 					EndIf
 				Case 2
 					$iResultFrame = $iArgumentFirstFrame * $iArgumentSecondFrame
@@ -854,6 +894,16 @@ While 1
 
 			;------------------------------------------------------------------------Close Settings
 		Case $aMsg[0] = $GUI_EVENT_CLOSE And $aMsg[1] = $hFormSettings
+			$aiGUISettingsPosition = WinGetPos($hFormSettings)
+			Switch $sArchitecture
+				Case "X64"
+					RegWrite("HKCU64\Software\NyBumBum\tcCalculator", "GUISettingsPosition_X", "REG_SZ", $aiGUISettingsPosition[0])
+					RegWrite("HKCU64\Software\NyBumBum\tcCalculator", "GUISettingsPosition_Y", "REG_SZ", $aiGUISettingsPosition[1])
+				Case "X86"
+					RegWrite("HKCU\Software\NyBumBum\tcCalculator", "GUISettingsPosition_X", "REG_SZ", $aiGUISettingsPosition[0])
+					RegWrite("HKCU\Software\NyBumBum\tcCalculator", "GUISettingsPosition_Y", "REG_SZ", $aiGUISettingsPosition[1])
+			EndSwitch
+			;--------------------------------------
 			GUISetState(@SW_HIDE, $hFormSettings)
 			GUISetState(@SW_ENABLE, $hFormMain)
 			WinActivate($hFormMain)
@@ -862,7 +912,7 @@ While 1
 			ControlHide($hFormSettings, "", $hInput_HotKey)
 			ControlFocus($hFormMain, "", $idInput)
 			GUICtrlSendMsg($idInput, $EM_SETSEL, -1, -1)
-			;---------------------------------------------------------------------------------Links
+			;------------------------------------------------------------------------Links
 		Case $aMsg[0] = $idLabel_Wikipedia
 			ShellExecute("https://en.wikipedia.org/wiki/SMPTE_timecode")
 		Case $aMsg[0] = $idLabel_About_Site
@@ -871,7 +921,7 @@ While 1
 			ShellExecute("https://github.com/nbb1967/tccalculator")
 		Case $aMsg[0] = $idLabel_About_Contact
 			ShellExecute("mailto:nybumbum@gmail.com?subject=tcCalculator")
-			;------------------------------------------------------------------Checkbox BadSeparator
+			;------------------------------------------------------------------------Checkbox BadSeparator
 		Case $aMsg[0] = $idCheckbox_BadSeparator
 			If GUICtrlRead($idCheckbox_BadSeparator) = $GUI_CHECKED Then
 				GUICtrlSetState($idLabel_Bad_Hours, $GUI_ENABLE)
@@ -898,14 +948,14 @@ While 1
 				GUICtrlSetState($idLabel_DropFrame, $GUI_ENABLE)
 				GUICtrlSetState($idLabel_DropFrame2, $GUI_ENABLE)
 			EndIf
-			;-----------------------------------------------------------------------Checkbox HotKey
+			;------------------------------------------------------------------------Checkbox HotKey
 		Case $aMsg[0] = $idCheckbox_HotKey
 			If GUICtrlRead($idCheckbox_HotKey) = $GUI_CHECKED Then
 				ControlEnable($hFormSettings, "", $hInput_HotKey)
 			Else
 				ControlDisable($hFormSettings, "", $hInput_HotKey)
 			EndIf
-			;----------------------------------------------------------------Tab (for _GUICtrlHotkey_Create)
+			;------------------------------------------------------------------------Tab (for _GUICtrlHotkey_Create)
 		Case $aMsg[0] = $hTab
 			$iCurrTab = GUICtrlRead($hTab)
 			If $iCurrTab <> $iLastTab Then
@@ -922,7 +972,7 @@ While 1
 				EndSwitch
 				$iLastTab = $iCurrTab
 			EndIf
-			;------------------------------------------------------------------------------Save
+			;--------------------------------------------------------------------------Save
 		Case $aMsg[0] = $idButton_Save
 			$iError = SetRegistry()
 			If $iError <> 0 Then
@@ -993,7 +1043,7 @@ While 1
 			ControlHide($hFormSettings, "", $hInput_HotKey)
 			ControlFocus($hFormMain, "", $idInput)
 			GUICtrlSendMsg($idInput, $EM_SETSEL, -1, -1)
-			;-------------------------------------------------------------------------------------Accelerators
+			;------------------------------------------------------------------------------Accelerators
 		Case $aMsg[0] = $idDummy_Divide And $aMsg[1] = $hFormMain
 			If BitAND(GUICtrlGetState($idButton_Divide), $GUI_DISABLE) = $GUI_DISABLE Then
 				ContinueLoop
@@ -1197,12 +1247,12 @@ Func RegistrationHotkey($sHK)
 EndFunc   ;==>RegistrationHotkey
 
 Func SmartPaste()
+	HotKeySet($sHotKey)    ;deregistration for Send and blocking multiple function execution.
 	While _IsPressed("10") Or _IsPressed("11") Or _IsPressed("12")        ; ©CreatoR (updown Shift,Ctrl,Alt)
 		Sleep(10)
 	WEnd
 
 	Local $iOnlyNumbers = StringRegExpReplace(ClipGet(), "[^\d]", "\1")
-	HotKeySet($sHotKey)    ;deregistration
 	Send($iOnlyNumbers)
 	HotKeySet($sHotKey, "SmartPaste")
 EndFunc   ;==>SmartPaste
@@ -1256,7 +1306,7 @@ Func SetRegistry()
 			EndIf
 		Case Not $bHotKeyMode And $tmp_bHotKeyMode            ;HotKeyMode enable
 			If $tmp_iHotKeyCode <> 0 Then
-				$tmp_sHotKey = _GUICtrlHotkey_GetHotkey($hInput_HotKey)
+				$tmp_sHotKey = StringLower(_GUICtrlHotkey_GetHotkey($hInput_HotKey))
 				_FixAccelHotKeyLayout()
 				$iErr = RegistrationHotkey($tmp_sHotKey)
 				If $iErr <> 0 Then
@@ -1268,7 +1318,7 @@ Func SetRegistry()
 		Case $bHotKeyMode And $tmp_bHotKeyMode                ;Change HotKey
 			If $tmp_iHotKeyCode <> 0 Then
 				If $tmp_iHotKeyCode <> $iHotKeyCode Then
-					$tmp_sHotKey = _GUICtrlHotkey_GetHotkey($hInput_HotKey)
+					$tmp_sHotKey = StringLower(_GUICtrlHotkey_GetHotkey($hInput_HotKey))
 					_FixAccelHotKeyLayout()
 					$iErr = RegistrationHotkey($tmp_sHotKey)
 					If $iErr <> 0 Then
@@ -1334,10 +1384,15 @@ Func SetRegistry()
 	Return 0
 EndFunc   ;==>SetRegistry
 #EndRegion;------------------------------------------------------------------------------------
+
 #Region ;--------------------Get Registry------------------------------------------------------
 Func GetRegistry()
 	Local $nBS1, $nBS2, $nBS3
 	If $sArchitecture = "X64" Then
+		$iGUIMainPosition_X = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "GUIMainPosition_X")
+		$iGUIMainPosition_Y = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "GUIMainPosition_Y")
+		$iGUISettingsPosition_X = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "GUISettingsPosition_X")
+		$iGUISettingsPosition_Y = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "GUISettingsPosition_Y")
 		$nFPSMode = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "FPSMode")
 		$bTrainingMode = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "TrainingMode")
 		$nDropSeparatorMode = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "DropSeparatorMode")
@@ -1367,6 +1422,10 @@ Func GetRegistry()
 		$bHotKeyMode = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "HotKeyMode")
 		$iHotKeyCode = RegRead("HKCU64\Software\NyBumBum\tcCalculator", "HotKeyCode")
 	ElseIf $sArchitecture = "X86" Then
+		$iGUIMainPosition_X = RegRead("HKCU\Software\NyBumBum\tcCalculator", "GUIMainPosition_X")
+		$iGUIMainPosition_Y = RegRead("HKCU\Software\NyBumBum\tcCalculator", "GUIMainPosition_Y")
+		$iGUISettingsPosition_X = RegRead("HKCU\Software\NyBumBum\tcCalculator", "GUISettingsPosition_X")
+		$iGUISettingsPosition_Y = RegRead("HKCU\Software\NyBumBum\tcCalculator", "GUISettingsPosition_Y")
 		$nFPSMode = RegRead("HKCU\Software\NyBumBum\tcCalculator", "FPSMode")
 		$bTrainingMode = RegRead("HKCU\Software\NyBumBum\tcCalculator", "TrainingMode")
 		$nDropSeparatorMode = RegRead("HKCU\Software\NyBumBum\tcCalculator", "DropSeparatorMode")
@@ -1458,6 +1517,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 1
 												$aSel[1] += 1
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1468,6 +1528,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 2
 												$aSel[1] += 2
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_0()
@@ -1509,6 +1570,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 1
 												$aSel[1] += 1
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1516,6 +1578,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 1
 												$aSel[1] += 1
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_1()
@@ -1563,6 +1626,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 2
 												$aSel[1] += 2
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1570,6 +1634,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 2
 												$aSel[1] += 2
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_2()
@@ -1618,6 +1683,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 3
 												$aSel[1] += 3
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1625,6 +1691,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 3
 												$aSel[1] += 3
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_3()
@@ -1670,6 +1737,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 4
 												$aSel[1] += 4
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1677,6 +1745,8 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 4
 												$aSel[1] += 4
 										EndSwitch
+										_TildeDisable()
+										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_4()
 										ButtonBlinking(0)
@@ -1720,6 +1790,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 5
 												$aSel[1] += 5
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1727,6 +1798,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 5
 												$aSel[1] += 5
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_5()
@@ -1781,6 +1853,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 6
 												$aSel[1] += 6
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1788,6 +1861,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 6
 												$aSel[1] += 6
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_6()
@@ -1832,6 +1906,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 7
 												$aSel[1] += 7
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1839,6 +1914,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 7
 												$aSel[1] += 7
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_7()
@@ -1890,6 +1966,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 8
 												$aSel[1] += 8
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1897,6 +1974,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 8
 												$aSel[1] += 8
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_8()
@@ -1948,6 +2026,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 9
 												$aSel[1] += 9
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -1955,6 +2034,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 9
 												$aSel[1] += 9
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_9()
@@ -2000,6 +2080,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 10
 												$aSel[1] += 10
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -2007,6 +2088,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 10
 												$aSel[1] += 10
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_10()
@@ -2052,6 +2134,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 11
 												$aSel[1] += 11
 										EndSwitch
+										_TildeDisable()
 										;----------------------------------------------------------
 									ElseIf _IsPressed("2E", $hDLL) Then                    ;DELETE
 										Switch $aSel[0]
@@ -2059,6 +2142,7 @@ Func _WM_COMMAND($hWnd, $Msg, $wParam, $lParam)
 												$aSel[0] += 11
 												$aSel[1] += 11
 										EndSwitch
+										_TildeDisable()
 										;---------------------------------------------------------
 									ElseIf _IsPressed("30", $hDLL) Or _IsPressed("60", $hDLL) Then
 										$tmp = FormatForNumber_Sel_11()
@@ -2352,7 +2436,9 @@ Func FormatForNumber_Sel_11()
 	Return $tmp
 EndFunc   ;==>FormatForNumber_Sel_11
 #EndRegion;-----------------------------------------------------------------------------------------
+
 Func ButtonBlinking($nBtn)
+	_TildeDisable()
 	Switch $nBtn
 		Case 0
 			_SendMessage($hButton_0, $BM_SETSTATE, True)
@@ -2402,6 +2488,7 @@ Func _WindowProc($hWnd, $Msg, $wParam, $lParam)
 		Case GUICtrlGetHandle($idInput)
 			Switch $Msg
 				Case $WM_CONTEXTMENU
+					_ActivityContextMenuItem_Input()
 					_GUICtrlMenu_TrackPopupMenu($hContextMenu_Input, $wParam)
 					Return 1
 				Case $WM_COMMAND
@@ -2629,3 +2716,84 @@ Func ConversionFramesToTimeCode()
 	$iHours = Int(Int(Int($iTotalNumberFrames / $iFPS) / 60) / 60)
 EndFunc   ;==>ConversionFramesToTimeCode
 #EndRegion ;--------------------------Conversion------algorithm by David Heidelberger------------------------------------------
+
+Func _TildeDisable()
+	If $bTildeEnabled Then
+		If @OSVersion == "WIN_11" Then    ;Or WIN_12
+			GUICtrlSetColor($idInput, 0xFFFFFF)
+		Else
+			GUICtrlSetColor($idInput, 0x000000)
+		EndIf
+		$bTildeEnabled = False
+	EndIf
+EndFunc   ;==>_TildeDisable
+;-----------------------------------------------------------------------ACTIVITY OF CONTEXT MENU ITEMS FOR INPUT
+Func _ActivityContextMenuItem_Input()
+	ClipGet()
+	If @error Then
+		If _GUICtrlMenu_GetItemEnabled($hContextMenu_Input, 2) Then
+			_GUICtrlMenu_SetItemDisabled($hContextMenu_Input, 2)    ;Paste
+		EndIf
+	Else
+		$sRegexNumbersInClipboard = '(\d)'
+		$iNumbersInClipboard = StringRegExp(ClipGet(), $sRegexNumbersInClipboard)
+		If $iNumbersInClipboard = 1 Then
+			If _GUICtrlMenu_GetItemDisabled($hContextMenu_Input, 2) Then
+				_GUICtrlMenu_SetItemEnabled($hContextMenu_Input, 2)        ;Paste
+			EndIf
+		Else
+			If _GUICtrlMenu_GetItemEnabled($hContextMenu_Input, 2) Then
+				_GUICtrlMenu_SetItemDisabled($hContextMenu_Input, 2)        ;Paste
+			EndIf
+		EndIf
+	EndIf
+	;-------------------------------------------------
+	$aSel = _GUICtrlEdit_GetSel($idInput)
+	If $aSel[1] - $aSel[0] = 0 Then
+		If _GUICtrlMenu_GetItemEnabled($hContextMenu_Input, 0) Then
+			_GUICtrlMenu_SetItemDisabled($hContextMenu_Input, 0)    ;Cut
+		EndIf
+		If _GUICtrlMenu_GetItemEnabled($hContextMenu_Input, 1) Then
+			_GUICtrlMenu_SetItemDisabled($hContextMenu_Input, 1)    ;Copy
+		EndIf
+		If _GUICtrlMenu_GetItemEnabled($hContextMenu_Input, 3) Then
+			_GUICtrlMenu_SetItemDisabled($hContextMenu_Input, 3)    ;Delete
+		EndIf
+	Else
+		If _GUICtrlMenu_GetItemDisabled($hContextMenu_Input, 0) Then
+			_GUICtrlMenu_SetItemEnabled($hContextMenu_Input, 0)        ;Cut
+		EndIf
+		If _GUICtrlMenu_GetItemDisabled($hContextMenu_Input, 1) Then
+			_GUICtrlMenu_SetItemEnabled($hContextMenu_Input, 1)        ;Copy
+		EndIf
+		If _GUICtrlMenu_GetItemDisabled($hContextMenu_Input, 3) Then
+			_GUICtrlMenu_SetItemEnabled($hContextMenu_Input, 3)        ;Delete
+		EndIf
+	EndIf
+	;--------------------------------------------------
+	$iAll = StringLen(GUICtrlRead($idInput))
+	If $aSel[1] - $aSel[0] = $iAll Then
+		If _GUICtrlMenu_GetItemEnabled($hContextMenu_Input, 5) Then
+			_GUICtrlMenu_SetItemDisabled($hContextMenu_Input, 5)        ;Select All
+		EndIf
+	Else
+		If _GUICtrlMenu_GetItemDisabled($hContextMenu_Input, 5) Then
+			_GUICtrlMenu_SetItemEnabled($hContextMenu_Input, 5)        ;Select All
+		EndIf
+	EndIf
+EndFunc   ;==>_ActivityContextMenuItem_Input
+;-----------------------------------------------------------------RETURN WINDOW FROM AN INACCESSIBLE POSITION
+Func _Check_Window_Position($iWinPos_X, $iWinPos_Y, $iWinWidth, $iWinHeight)
+	Local $tRECT_WorkArea, $iWidth_WorkArea, $iHeight_WorkArea
+	$tRECT_WorkArea = _WinAPI_GetWorkArea()
+	$iWidth_WorkArea = DllStructGetData($tRECT_WorkArea, 'Right') - DllStructGetData($tRECT_WorkArea, 'Left')
+	$iHeight_WorkArea = DllStructGetData($tRECT_WorkArea, 'Bottom') - DllStructGetData($tRECT_WorkArea, 'Top')
+
+
+	If $iWinPos_X > -100 And $iWinPos_X < $iWidth_WorkArea - 100 And $iWinPos_Y > -10 And $iWinPos_Y < $iHeight_WorkArea - 30 Then
+		Return
+	Else
+		SetError(1)
+		Return
+	EndIf
+EndFunc   ;==>_Check_Window_Position
